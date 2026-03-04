@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PICODE_DIR="$HOME/picode"
+PICODE_META="$PICODE_DIR/.picode"
+TMUX_SESSION="claude-rc"
+NUM_SESSIONS=5
+CLAUDE_CMD='while true; do echo y | claude remote-control --allow-dangerously-skip-permissions; echo "Exited ($?). Restarting in 5s..."; sleep 5; done'
+
+git_cmd() {
+    exec git --git-dir="$PICODE_META/git" --work-tree="$PICODE_DIR" "$@"
+}
+
+cmd_start() {
+    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        echo "Already running."
+        return 0
+    fi
+
+    for i in $(seq 1 "$NUM_SESSIONS"); do
+        if [ "$i" -eq 1 ]; then
+            tmux new-session -d -s "$TMUX_SESSION" -n "s$i" -c "$PICODE_DIR" \
+                "bash -c '$CLAUDE_CMD'"
+        else
+            tmux new-window -t "$TMUX_SESSION" -n "s$i" -c "$PICODE_DIR" \
+                "bash -c '$CLAUDE_CMD'"
+        fi
+    done
+    tmux set-option -t "$TMUX_SESSION" remain-on-exit on
+    echo "Started $NUM_SESSIONS sessions."
+}
+
+cmd_stop() {
+    if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        echo "Not running."
+        return 0
+    fi
+
+    # claude needs multiple C-c to exit
+    for _ in 1 2 3; do
+        for window in $(tmux list-windows -t "$TMUX_SESSION" -F '#{window_name}'); do
+            tmux send-keys -t "$TMUX_SESSION:$window" C-c "" 2>/dev/null || true
+        done
+        sleep 0.2
+    done
+    sleep 1
+    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
+    echo "Stopped."
+}
+
+cmd_restart() {
+    local n="${1:-}"
+    if [ -z "$n" ]; then
+        cmd_stop
+        sleep 1
+        cmd_start
+        return
+    fi
+
+    if [ "$n" -lt 1 ] || [ "$n" -gt "$NUM_SESSIONS" ]; then
+        echo "Error: session number must be 1-$NUM_SESSIONS" >&2
+        exit 1
+    fi
+
+    local window="s$n"
+    tmux send-keys -t "$TMUX_SESSION:$window" C-c "" 2>/dev/null || true
+    sleep 1
+    tmux respawn-window -k -t "$TMUX_SESSION:$window" \
+        "bash -c '$CLAUDE_CMD'"
+    echo "Restarted $window."
+}
+
+cmd_status() {
+    if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        echo "Not running."
+        return 1
+    fi
+    tmux list-windows -t "$TMUX_SESSION"
+}
+
+cmd_attach() {
+    exec tmux attach-session -t "$TMUX_SESSION"
+}
+
+cmd_setup() {
+    if ! command -v claude &>/dev/null; then
+        echo "ERROR: 'claude' not found in PATH. Install Claude Code first." >&2
+        exit 1
+    fi
+
+    # Install dependencies
+    for pkg in tmux gh; do
+        command -v "$pkg" &>/dev/null || sudo apt-get install -yqq "$pkg"
+    done
+
+    # Initialize bare git repo
+    mkdir -p "$PICODE_META"
+    if [ ! -f "$PICODE_META/git/HEAD" ]; then
+        echo "Initializing git repo..."
+        git init --bare --initial-branch=main "$PICODE_META/git" -q
+    fi
+
+    # Symlink CLI
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$PICODE_META/picode" "$HOME/.local/bin/picode"
+    echo "Linked picode to ~/.local/bin/"
+
+    # Manual steps
+    echo ""
+    echo "The following must be done manually (skip any already completed):"
+    echo ""
+    echo "  GitHub auth:"
+    echo "    1. Run: gh auth login"
+    echo "    2. Run: gh auth setup-git"
+    echo ""
+    echo "  Claude workspace trust:"
+    echo "    1. Run: cd $PICODE_DIR && claude"
+    echo "    2. Log in if prompted"
+    echo "    3. Accept the workspace trust prompt"
+    echo "    4. Exit claude (/exit or Ctrl-C)"
+    echo ""
+    read -rp "Press Enter to continue (or to skip if already done)..."
+    echo ""
+
+    # Enable linger for user services to survive logout
+    if ! loginctl show-user "$(whoami)" --property=Linger 2>/dev/null | grep -q "yes"; then
+        echo "Enabling linger..."
+        sudo loginctl enable-linger "$(whoami)"
+    fi
+
+    # Enable and start systemd service
+    mkdir -p "$HOME/.config/systemd/user"
+    ln -sf "$PICODE_META/claude-rc.service" "$HOME/.config/systemd/user/claude-rc.service"
+    systemctl --user daemon-reload
+    systemctl --user enable --now claude-rc
+    echo "Done. Run 'picode status' to verify."
+}
+
+usage() {
+    cat <<'EOF'
+Usage: picode <command> [args]
+
+Commands:
+  start           Start all 5 remote-control sessions in tmux
+  stop            Stop all sessions (kill tmux session)
+  restart [N]     Restart session N (1-5), or all if N omitted
+  status          Show tmux session status
+  attach          Attach to the tmux session
+  git [args...]   Run git with GIT_DIR/WORK_TREE set
+  setup           Run first-time setup
+EOF
+}
+
+case "${1:-}" in
+    start)   cmd_start ;;
+    stop)    cmd_stop ;;
+    restart) shift; cmd_restart "${1:-}" ;;
+    status)  cmd_status ;;
+    attach)  cmd_attach ;;
+    git)     shift; git_cmd "$@" ;;
+    setup)   cmd_setup ;;
+    *)       usage ;;
+esac
