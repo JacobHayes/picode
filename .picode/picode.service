@@ -1,5 +1,5 @@
 [Unit]
-Description=Claude Code Remote Control Sessions
+Description=Picode Remote Control Sessions
 After=network-online.target
 Wants=network-online.target
 

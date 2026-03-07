@@ -14,12 +14,12 @@ Persistent Claude Code remote-control sessions on a Raspberry Pi. Five sessions 
 ```
 ~/picode/
 ├── .picode/
-│   ├── git/                    # bare git repo (used via GIT_DIR)
-│   ├── picode                  # CLI script (symlinked to ~/.local/bin/picode)
-│   ├── claude-rc.service       # systemd unit (symlinked to ~/.config/systemd/user/)
-│   └── README.md               # this file
-├── .gitignore                  # ignores everything except .picode/ and .gitignore
-└── (agent working files...)    # untracked, gitignored
+│   ├── git/                 # bare git repo (used via GIT_DIR)
+│   ├── picode               # CLI script (symlinked to ~/.local/bin/picode)
+│   ├── picode.service       # systemd unit (symlinked to ~/.config/systemd/user/)
+│   └── README.md            # this file
+├── .gitignore               # ignores everything except .picode/ and .gitignore
+└── (agent working files...) # untracked, gitignored
 ```
 
 All infrastructure lives in `.picode/`. The `~/picode` directory itself is the clean working directory for agents — any files they create are gitignored.
@@ -38,7 +38,7 @@ picode setup           # Run first-time setup
 
 ## How It Works
 
-- **tmux**: 5 windows (`s1`–`s5`) in session `claude-rc`, each running `claude remote-control --allow-dangerously-skip-permissions`
+- **tmux**: 5 windows (`picode-1`–`picode-5`) in session `picode`, each running `claude remote-control --name "picode - N"`
 - **systemd user service**: starts tmux on boot; **loginctl linger** keeps it running without a login session
 - **Retry loop + `remain-on-exit`**: sessions auto-restart on crash; tmux keeps dead windows visible for debugging
 - **`echo y |`**: auto-accepts the remote control confirmation prompt

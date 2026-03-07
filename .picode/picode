@@ -3,9 +3,13 @@ set -euo pipefail
 
 PICODE_DIR="$HOME/picode"
 PICODE_META="$PICODE_DIR/.picode"
-TMUX_SESSION="claude-rc"
+TMUX_SESSION="picode"
 NUM_SESSIONS=5
-CLAUDE_CMD='while true; do echo y | claude remote-control --allow-dangerously-skip-permissions; echo "Exited ($?). Restarting in 5s..."; sleep 5; done'
+
+claude_cmd() {
+    local i="$1"
+    echo "while true; do echo y | claude remote-control --allow-dangerously-skip-permissions --name \"picode - $i\"; echo \"Exited (\$?). Restarting in 5s...\"; sleep 5; done"
+}
 
 git_cmd() {
     exec git --git-dir="$PICODE_META/git" --work-tree="$PICODE_DIR" "$@"
@@ -18,12 +22,14 @@ cmd_start() {
     fi
 
     for i in $(seq 1 "$NUM_SESSIONS"); do
+        local cmd
+        cmd=$(claude_cmd "$i")
         if [ "$i" -eq 1 ]; then
-            tmux new-session -d -s "$TMUX_SESSION" -n "s$i" -c "$PICODE_DIR" \
-                "bash -c '$CLAUDE_CMD'"
+            tmux new-session -d -s "$TMUX_SESSION" -n "picode-$i" -c "$PICODE_DIR" \
+                "bash -c '$cmd'"
         else
-            tmux new-window -t "$TMUX_SESSION" -n "s$i" -c "$PICODE_DIR" \
-                "bash -c '$CLAUDE_CMD'"
+            tmux new-window -t "$TMUX_SESSION" -n "picode-$i" -c "$PICODE_DIR" \
+                "bash -c '$cmd'"
         fi
     done
     tmux set-option -t "$TMUX_SESSION" remain-on-exit on
@@ -50,6 +56,7 @@ cmd_stop() {
 
 cmd_restart() {
     local n="${1:-}"
+
     if [ -z "$n" ]; then
         cmd_stop
         sleep 1
@@ -62,12 +69,14 @@ cmd_restart() {
         exit 1
     fi
 
-    local window="s$n"
-    tmux send-keys -t "$TMUX_SESSION:$window" C-c "" 2>/dev/null || true
+    local cmd
+    cmd=$(claude_cmd "$n")
+
+    tmux send-keys -t "$TMUX_SESSION:picode-$n" C-c "" 2>/dev/null || true
     sleep 1
-    tmux respawn-window -k -t "$TMUX_SESSION:$window" \
-        "bash -c '$CLAUDE_CMD'"
-    echo "Restarted $window."
+    tmux respawn-window -k -t "$TMUX_SESSION:picode-$n" \
+        "bash -c '$cmd'"
+    echo "Restarted picode-$n."
 }
 
 cmd_status() {
@@ -130,9 +139,9 @@ cmd_setup() {
 
     # Enable and start systemd service
     mkdir -p "$HOME/.config/systemd/user"
-    ln -sf "$PICODE_META/claude-rc.service" "$HOME/.config/systemd/user/claude-rc.service"
+    ln -sf "$PICODE_META/picode.service" "$HOME/.config/systemd/user/picode.service"
     systemctl --user daemon-reload
-    systemctl --user enable --now claude-rc
+    systemctl --user enable --now picode
     echo "Done. Run 'picode status' to verify."
 }
 
