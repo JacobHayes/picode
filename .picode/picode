@@ -8,7 +8,7 @@ NUM_SESSIONS=5
 
 claude_cmd() {
     local i="$1"
-    echo "while true; do echo y | claude remote-control --allow-dangerously-skip-permissions --name \"picode - $i\"; echo \"Exited (\$?). Restarting in 5s...\"; sleep 5; done"
+    echo "while true; do echo y | claude remote-control --name \"picode - $i\"; echo \"Exited (\$?). Restarting in 5s...\"; sleep 5; done"
 }
 
 git_cmd() {
