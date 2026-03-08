@@ -131,6 +131,11 @@ cmd_upgrade() {
 
     echo "$latest_version" > "$PICODE_META/.version"
     echo "Upgraded from version $current_version to $latest_version."
+
+    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        echo "Restarting sessions..."
+        cmd_restart
+    fi
 }
 
 cmd_setup() {
