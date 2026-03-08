@@ -3,3 +3,4 @@
 !.picode/
 !.picode/**
 .picode/git/
+.picode/.version

@@ -15,6 +15,17 @@ git_cmd() {
     exec git --git-dir="$PICODE_META/git" --work-tree="$PICODE_DIR" "$@"
 }
 
+get_latest_version() {
+    local latest=0
+    for script in "$PICODE_META/upgrades"/*.sh; do
+        [ -f "$script" ] || continue
+        local v
+        v=$(basename "$script" | cut -d- -f1 | sed 's/^0*//')
+        [ "$v" -gt "$latest" ] && latest="$v"
+    done
+    echo "$latest"
+}
+
 cmd_start() {
     if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
         echo "Already running."
@@ -91,6 +102,37 @@ cmd_attach() {
     exec tmux attach-session -t "$TMUX_SESSION"
 }
 
+cmd_upgrade() {
+    echo "Fetching latest version..."
+    git --git-dir="$PICODE_META/git" --work-tree="$PICODE_DIR" fetch origin main
+    git --git-dir="$PICODE_META/git" --work-tree="$PICODE_DIR" reset --hard origin/main
+
+    local current_version=0
+    if [ -f "$PICODE_META/.version" ]; then
+        current_version=$(cat "$PICODE_META/.version")
+    fi
+
+    local latest_version
+    latest_version=$(get_latest_version)
+
+    if [ "$latest_version" -le "$current_version" ]; then
+        echo "Already at latest version ($current_version)."
+        return
+    fi
+
+    for script in $(ls "$PICODE_META/upgrades"/*.sh 2>/dev/null | sort); do
+        local version
+        version=$(basename "$script" | cut -d- -f1 | sed 's/^0*//')
+        if [ "$version" -gt "$current_version" ]; then
+            echo "Running upgrade $version: $(basename "$script")..."
+            bash "$script"
+        fi
+    done
+
+    echo "$latest_version" > "$PICODE_META/.version"
+    echo "Upgraded from version $current_version to $latest_version."
+}
+
 cmd_setup() {
     if ! command -v claude &>/dev/null; then
         echo "ERROR: 'claude' not found in PATH. Install Claude Code first." >&2
@@ -142,6 +184,12 @@ cmd_setup() {
     ln -sf "$PICODE_META/picode.service" "$HOME/.config/systemd/user/picode.service"
     systemctl --user daemon-reload
     systemctl --user enable --now picode
+
+    # Set version to latest on fresh install only (existing installs need migrations via upgrade)
+    if [ ! -f "$PICODE_META/.version" ]; then
+        get_latest_version > "$PICODE_META/.version"
+    fi
+
     echo "Done. Run 'picode status' to verify."
 }
 
@@ -157,6 +205,7 @@ Commands:
   attach          Attach to the tmux session
   git [args...]   Run git with GIT_DIR/WORK_TREE set
   setup           Run first-time setup
+  upgrade         Fetch latest and run migrations
 EOF
 }
 
@@ -168,5 +217,6 @@ case "${1:-}" in
     attach)  cmd_attach ;;
     git)     shift; git_cmd "$@" ;;
     setup)   cmd_setup ;;
+    upgrade) cmd_upgrade ;;
     *)       usage ;;
 esac
