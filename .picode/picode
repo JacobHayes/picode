@@ -39,7 +39,7 @@ cmd_start() {
             tmux new-session -d -s "$TMUX_SESSION" -n "picode-$i" -c "$PICODE_DIR" \
                 "bash -c '$cmd'"
         else
-            tmux new-window -t "$TMUX_SESSION" -n "picode-$i" -c "$PICODE_DIR" \
+            tmux new-window -t "$TMUX_SESSION:" -n "picode-$i" -c "$PICODE_DIR" \
                 "bash -c '$cmd'"
         fi
     done
