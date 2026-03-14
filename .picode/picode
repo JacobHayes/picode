@@ -4,7 +4,7 @@ set -euo pipefail
 PICODE_DIR="$HOME/picode"
 PICODE_META="$PICODE_DIR/.picode"
 TMUX_SESSION="picode"
-NUM_SESSIONS=5
+NUM_SESSIONS=1
 
 claude_cmd() {
     local i="$1"
@@ -203,9 +203,9 @@ usage() {
 Usage: picode <command> [args]
 
 Commands:
-  start           Start all 5 remote-control sessions in tmux
-  stop            Stop all sessions (kill tmux session)
-  restart [N]     Restart session N (1-5), or all if N omitted
+  start           Start the remote-control session in tmux
+  stop            Stop the session (kill tmux session)
+  restart [N]     Restart session N, or all if N omitted
   status          Show tmux session status
   attach          Attach to the tmux session
   git [args...]   Run git with GIT_DIR/WORK_TREE set

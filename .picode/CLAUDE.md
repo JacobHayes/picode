@@ -22,8 +22,8 @@ picode git log --oneline
 
 ```bash
 picode status          # list sessions
-picode restart [N]     # restart session N (1-5) or all
-picode attach          # attach to tmux (Ctrl-b 0-4 to switch)
+picode restart [N]     # restart session N or all
+picode attach          # attach to tmux
 ```
 
 ## Tools
